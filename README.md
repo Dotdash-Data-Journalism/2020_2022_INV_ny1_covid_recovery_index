@@ -8,13 +8,13 @@ The index consists of six measures of the economic, social, and public health of
 
 Each index measure is compared to a pre-pandemic (typically 2019 level) baseline for said measure in order to calculate how different the latest data measure is from "normal". Indexes are calculated to have scores closer to 0 be farther from normal (i.e. worse) and higher scores be closer to normal (i.e. better). Each individual index measure out of 16 & 2/3rds is the totaled up to see the total index score out of 100. 
 
-Data is gathered and analyzed by the `NY1_Covid_Recovery_Data_Update.R` R file and  CSVs for the [Datawrappers]() are written into the `vizFiles` folder with the format `YYYY-MM-DD_Recovery_Index_WoW_Changes.csv` & `YYYY-MM-DD_DW_NYC_Recovery_Index_Overview.csv`. Data for each individual measure are written into CSVs in the `dataFiles` folder.
+Data is gathered and analyzed by the `NY1_Covid_Recovery_Data_Update.R` R file and  CSVs for the [Datawrappers](https://app.datawrapper.de/) are written into the `visualizations` folder with the format `YYYY-MM-DD_Recovery_Index_WoW_Changes.csv` & `YYYY-MM-DD_DW_NYC_Recovery_Index_Overview.csv`. Data for each individual measure are written into CSVs in the `data` folder.
 
 ## Data Sources
 
 COVID-19 hospitalization data is taken from the [NYC Department of Health GitHub repository](https://github.com/nychealth/coronavirus-data) and a seven-day trailing average is calculated for the index score.
 
-Unemployment insurance (UI) claims for New York City are imputed from the NY statewide weekly UI claims data released by the [US Department of Labor](https://oui.doleta.gov/unemploy/claims.asp) and a three-week rolling average of the city to stateside proportion from [2020 citywide claims](https://dol.ny.gov/statistics-weekly-claims-and-benefits-report) released by the NY Department of Labor. Latest UI claims are then compared to claims from the same week in 2019 and the percent change between them is used for the index score.
+Unemployment insurance (UI) claims for New York City are calculated from the county level [weekly ui claims report](https://dol.ny.gov/statistics-weekly-claims-and-benefits-report) put out by the [NY Department of Labor](https://dol.ny.gov/labor-data-0). A three-week rolling average of 2019 claims from the counties that make up NYC are also calculated from the same source. Latest UI claims are then compared to claims from the same week in 2019 and the percent change between them is used for the index score.
 
 MTA subway [ridership data]("https://new.mta.info/document/20441) is taken from their [day-by-day ridership page](https://new.mta.info/coronavirus/ridership) and includes the raw total number of estimated daily riderships and the percent of riders measured against comparable pre-pandemic day. Both are used to calculate a seven-day trailing average and the measure index score is derived from the latter.
 
