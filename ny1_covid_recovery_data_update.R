@@ -93,7 +93,7 @@ otUpdate <- tryCatch({
     filter(city == "New York")
 
   otOld <- read_csv("./data/opentable.csv",
-                    col_types = "iDddd")
+                    col_types = "iDdddd")
 
   openTableReadyNew <- otYoY %>%
     mutate(Date = otDates, prePanChg = rollmean(pct_chg, k = 7, fill = NA, align = "right")) %>%
@@ -102,7 +102,10 @@ otUpdate <- tryCatch({
     rename(`7-day Average` = `New York`) %>%
     mutate(`Day of Week` = wday(Date),
            `OpenTable YoY Seated Diner Data (%)` = NA_integer_,
-           `Restaurant Reservations Index` = `7-day Average` + 100) %>%
+           `Restaurant Reservations Index Original` = `7-day Average` + 100,
+           `Restaurant Reservations Index` = if_else(`Restaurant Reservations Index Original` > 100,
+                                                     100,
+                                                     `Restaurant Reservations Index Original`)) %>%
     relocate(`Day of Week`, .before = Date) %>%
     filter(Date > max(otOld$Date) & Date <= weekOfAnalysisDate) %>%
     arrange(desc(Date))
@@ -134,7 +137,8 @@ mtaUpdate <- tryCatch(
              Date = mdy(Date)) %>%
       arrange(Date) %>%
       mutate(`7-day Average` = rollmean(`Subways: % of Comparable Pre-Pandemic Day`, k = 7, fill = NA, align = "right"),
-             `Subway Mobility Index` = (1 + `7-day Average`) * 100) %>%
+             `Subway Mobility Index Original` = (1 + `7-day Average`) * 100,
+             `Subway Mobility Index` = if_else(`Subway Mobility Index Original` > 100, 100, `Subway Mobility Index Original`)) %>%
       mutate(`Day of Week` = c(7, rep_len(seq(1, 7, 1), nrow(.) - 1)),
              `Avg. Ridership` = rollmean(`Subways: Total Estimated Ridership`, k = 7, fill = NA, align = "right")) %>%
       relocate(`Day of Week`, .before = Date) %>%
@@ -185,7 +189,10 @@ uiUpdate <- tryCatch({
   latest_claims %>%
     left_join(claims2019, by = "isoweek") %>%
     mutate(pct_change_19_now = (total_claims - rolling_avg_claims) / rolling_avg_claims,
-           `Unemployment Claims Index` = 100 / ((100 * pct_change_19_now) + 100) * 100) %>%
+           `Unemployment Claims Index Original` = 100 / ((100 * pct_change_19_now) + 100) * 100,
+           `Unemployment Claims Index` = if_else(`Unemployment Claims Index Original` > 100, 
+                                                 100, 
+                                                 `Unemployment Claims Index Original`)) %>%
     arrange(desc(date)) -> updatedNYCUI
 
 
@@ -212,12 +219,15 @@ covidUpdate <- tryCatch({
            HOSPITALIZED_COUNT = as.integer(HOSPITALIZED_COUNT),
            rolling_seven = rollmean(HOSPITALIZED_COUNT, k = 7, fill = NA, align = "right"),
            log_hosp = log10(rolling_seven + 1),
-           `Covid-19 Hospitalizations Index` = (1 - log_hosp / 3.5) * 100) %>%
+           `Covid-19 Hospitalizations Index Original` = (1 - log_hosp / 3.5) * 100,
+           `Covid-19 Hospitalizations Index` = if_else(`Covid-19 Hospitalizations Index Original` > 100,
+                                                       100,
+                                                       `Covid-19 Hospitalizations Index Original`)) %>%
     filter(!is.na(`Covid-19 Hospitalizations Index`), date_of_interest <= weekOfAnalysisDate) %>%
     arrange(desc(date_of_interest))
 
   fullNYCCovid19Hospitalizations <- read_csv("./data/nyc_covid19_hospitalizations.csv",
-                                             col_types = "Diddd")
+                                             col_types = "Didddd")
 
   newNYCCovid19Hospitalizations <- newNYCCovid19Hospitalizations %>%
     filter(date_of_interest > max(fullNYCCovid19Hospitalizations$date_of_interest))
@@ -260,7 +270,8 @@ homeSalesUpdate <- tryCatch({
 
   streetEasyLatest %>%
     inner_join(streetEasyRef, by = "iso_week") %>%
-    mutate(`Home Sales Index` = (`Number of Pending Sales` / three_week_2019_rolling_average) * 100,
+    mutate(`Home Sales Index Original` = (`Number of Pending Sales` / three_week_2019_rolling_average) * 100,
+           `Home Sales Index` = if_else(`Home Sales Index Original` > 100, 100, `Home Sales Index Original`),
            Date = (`Week Ending` - 1)) %>%
     arrange(desc(`Week Ending`)) -> streetEasyFull
 
@@ -280,7 +291,7 @@ Sys.sleep(5)
 rentalsUpdate <- tryCatch({
 
   nycRentalsFull <- read_csv("./data/streeteasy_rentals.csv",
-                             col_types = "iDdiddd")
+                             col_types = "iDdidddd")
 
   latestNYCRental <- read_sheet(ss = "17v5PF6LqZLbNEhq2BPKarmukR_hxn7lXXq27weXSXxk",
                                 sheet = "City Wide Data",
@@ -316,7 +327,10 @@ rentalsUpdate <- tryCatch({
     `Rental Inventory` = latestNYCRental,
     `Indexed to January Average` = (latestNYCRental - latestNYCRental * (1.11108297 - 1) * isoweek(weekOfAnalysisDate) / 52.28571429) / 16366.8,
     Difference = abs(`Indexed to January Average`/`10-yr Median Model`-1),
-    `Rental Inventory Index` = 100 / (Difference + 1)
+    `Rental Inventory Index Original` = 100 / (Difference + 1),
+    `Rental Inventory Index` = if_else(`Rental Inventory Index Original` > 100, 
+                                       100, 
+                                       `Rental Inventory Index Original`)
   )
 
   nycRentalsUpdated <- bind_rows(newNYCRentals, nycRentalsFull)
