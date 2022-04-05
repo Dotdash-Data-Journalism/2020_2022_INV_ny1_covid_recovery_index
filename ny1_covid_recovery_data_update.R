@@ -145,12 +145,12 @@ mtaUpdate <- tryCatch(
       select(date, subways_total_estimated, subways_of_comparable_pre) %>% 
       mutate(date = base::as.Date(date),
              across(starts_with("subways"), as.double),
-             subways_of_comparable_pre = subways_of_comparable_pre * 100,
-             `7-day Average` = rollmean(subways_of_comparable_pre, k = 7, fill = NA, align = "right"),
+             subways_of_comparable_pre = subways_of_comparable_pre - 1,
+             `7-day Average` = rollmean(subways_of_comparable_pre, k = 7, fill = NA, align = "left"),
              `Subway Mobility Index Original` = (1 + `7-day Average`) * 100,
              `Subway Mobility Index` = if_else(`Subway Mobility Index Original` > 100, 100, `Subway Mobility Index Original`),
              `Day of Week` = c(7, rep_len(seq(1, 7, 1), nrow(.) - 1)),
-             `Avg. Ridership` = rollmean(subways_total_estimated, k = 7, fill = NA, align = "right")) %>% 
+             `Avg. Ridership` = rollmean(subways_total_estimated, k = 7, fill = NA, align = "left")) %>% 
       relocate(`Day of Week`, .before = date) %>%
       relocate(subways_total_estimated, .after = last_col()) %>% 
       arrange(desc(date)) %>% 
