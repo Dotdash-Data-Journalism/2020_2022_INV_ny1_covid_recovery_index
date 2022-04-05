@@ -10,7 +10,7 @@ jobs:
     runs-on: macOS-latest
     # retrieve secrets from github
     env:
-        RENV_PATHS_ROOT: ~/.local/share/renv
+        RENV_PATHS_ROOT: ~/Library/Application Support/renv
     #
     steps:
       # Checks-out your repository
