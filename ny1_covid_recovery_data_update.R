@@ -85,7 +85,7 @@ otUpdate <- tryCatch({
 
   otDates <- lubridate::ymd(otChrDates) %>% sort()
 
-  otYoY <- otData %>%
+  ot_change_all_no_date <- otData %>%
     extract2("covidDataCenter") %>%
     extract2("fullbook") %>%
     extract2("cities") %>%
@@ -93,12 +93,25 @@ otUpdate <- tryCatch({
       pct_chg = .$yoy,
       city = .$name
     )) %>%
-    filter(city == "New York")
+    filter(city %in% c("New York", "Los Angeles", "Chicago", "Houston", "Washington"))
+  
+  ot_change_all_no_date %>% 
+    mutate(date = rep(otDates, 5)) -> ot_change_all
+  
+  ot_change_all %>% 
+    pivot_wider(names_from = city, values_from = pct_chg) %>% 
+    mutate(across(!date, function(x) rollmean(x, k = 7, fill = NA, align = "right"))) %>% 
+    filter(date <= weekOfAnalysisDate) %>% 
+    arrange(desc(date)) %>% 
+    write_csv("./data/deep_dive_data/opentable_city_comparison.csv")
+  
+  ot_change_all %>% 
+    filter(city == "New York") -> ot_change_nyc
 
   otOld <- read_csv("./data/opentable.csv",
                     col_types = "iDdddd")
 
-  openTableReadyNew <- otYoY %>%
+  openTableReadyNew <- ot_change_nyc %>%
     mutate(Date = otDates, prePanChg = rollmean(pct_chg, k = 7, fill = NA, align = "right")) %>%
     select(-pct_chg) %>%
     pivot_wider(names_from = "city", values_from = "prePanChg") %>%
@@ -136,12 +149,21 @@ mtaUpdate <- tryCatch(
     
     mta_rows <- as.integer(Sys.Date()) - as.integer(base::as.Date("2020-03-01"))
     
-    mta_res <- GET(url = paste0("https://data.ny.gov/resource/vxuj-8kew.csv?$limit=", mta_rows),
+    mta_res <- GET(url = paste0("https://data.ny.gov/resource/vxuj-8kew.csv?$limit=", 
+                                mta_rows),
                authenticate(user = "anesta@dotdash.com", password = SCT_PW))
     
     stop_for_status(mta_res)
     
-    content(mta_res, encoding = "UTF-8", col_types = cols(.default = col_character())) %>%
+    mta_full_raw <- content(mta_res, encoding = "UTF-8", 
+                            col_types = cols(.default = col_character()))
+    
+    mta_full_raw %>% 
+      mutate(date = base::as.Date(date), 
+             across(!date, function(x) rollmean(as.double(x), k = 7, fill = NA, align = "left"))) %>% 
+      write_csv("./data/deep_dive_data/mta_transit_method_comparison.csv")
+    
+    mta_full_raw %>% 
       select(date, subways_total_estimated, subways_of_comparable_pre) %>% 
       mutate(date = base::as.Date(date),
              across(starts_with("subways"), as.double),
@@ -204,7 +226,51 @@ uiUpdate <- tryCatch({
                                                  100, 
                                                  `Unemployment Claims Index Original`)) %>%
     arrange(desc(date)) -> updatedNYCUI
-
+  
+  # Deep dive analysis
+  ## Industry and Occupation Group
+  walk2(list("Monthly IC by Industry", "Monthly IC by Occ Group"), 
+        list("Industry", "Occupational Group"),
+        function(x, y) {
+          col_name <- sym(y)
+          
+          df <- read_excel(path = "./data/nyUIClaimsWeekly.xlsx",
+                     sheet = x,
+                     skip = 1) %>% 
+            filter(Region == "New York City") %>% 
+            pivot_longer(!c(Region, !!col_name), names_to = "Month", values_to = "Claims") %>% 
+            mutate(Month = base::as.Date(paste(Month, "01"), "%B %Y %d")) %>% 
+            group_by(Month) %>% 
+            mutate(Total_Claims = sum(Claims, na.rm = T)) %>% 
+            ungroup() %>% 
+            mutate(Prop_Claims = round((Claims / Total_Claims) * 100, 2)) %>% 
+            select(-c(Claims, Total_Claims)) %>% 
+            pivot_wider(names_from = !!col_name, values_from = Prop_Claims)
+          
+          filename <- str_replace_all(str_to_lower(x), "\\s+", "_")
+          
+          write_csv(df, paste0("./data/deep_dive_data/", filename, ".csv"))
+          
+          
+        })
+  
+  # County
+  read_excel(path = "./data/nyUIClaimsWeekly.xlsx",
+             sheet = "Weekly Initial Claims by County",
+             skip = 1) %>%
+    pivot_longer(!c(Region, County), names_to = "Date", values_to = "Claims") %>%
+    rename_with(.fn = make_clean_names, .cols = everything()) %>%
+    mutate(date = base::as.Date(date, format = "%B %d, %Y"),
+           claims = as.integer(claims)) %>% 
+    filter(region == "New York City") %>% 
+    select(!region) %>% 
+    group_by(date) %>% 
+    mutate(tot_claims = sum(claims, na.rm = T)) %>% 
+    ungroup() %>% 
+    mutate(prop_claims = round((claims / tot_claims) * 100, 2)) %>% 
+    select(-c(claims, tot_claims)) %>% 
+    pivot_wider(names_from = county, values_from = prop_claims) %>% 
+    write_csv("./data/deep_dive_data/weekly_ic_claims_borough.csv")
 
 },
 error = function(e) {
@@ -243,6 +309,28 @@ covidUpdate <- tryCatch({
     filter(date_of_interest > max(fullNYCCovid19Hospitalizations$date_of_interest))
 
   updatedNYCCovid19Hospitalizations <- bind_rows(newNYCCovid19Hospitalizations, fullNYCCovid19Hospitalizations)
+  
+  # ICU and ICU intubated
+  GET(url = "https://health.data.ny.gov/resource/jw46-jpb7.csv?$limit=500000",
+      authenticate(user = "anesta@dotdash.com", password = SCT_PW)) -> nys_covid_res
+  
+  Sys.sleep(3)
+  stop_for_status(nys_covid_res)
+  
+  content(nys_covid_res, encoding = "UTF-8", col_types = cols(.default = col_character())) -> nys_covid_raw
+  
+  Sys.sleep(3)
+  
+  nys_covid_raw %>% 
+    filter(ny_forward_region == "NEW YORK CITY") %>% 
+    mutate(as_of_date = base::as.Date(as_of_date)) %>% 
+    group_by(as_of_date) %>% 
+    summarize(patients_currently_in_icu = sum(as.integer(patients_currently_in_icu), na.rm = T),
+              patients_currently_icu_intubated = sum(as.integer(patients_currently_icu), na.rm = T)) %>% 
+    mutate(across(!as_of_date, function(x) rollmean(as.double(x), k = 7, fill = NA, align = "right"))) %>% 
+    arrange(desc(as_of_date)) %>% 
+    write_csv("./data/deep_dive_data/nyc_covid_icu_and_intubated.csv")
+  
 
 },
 error = function(e) {
@@ -256,6 +344,7 @@ error = function(e) {
 })
 
 ### Home Sales Street Easy
+## TODO: Add in borough by borough home sales breakout and change over time
 Sys.sleep(3)
 homeSalesUpdate <- tryCatch({
 
@@ -289,6 +378,7 @@ error = function(e) {
 })
 
 Sys.sleep(5)
+## TODO: Add in borough by borough rental vacancy change over time
 rentalsUpdate <- tryCatch({
 
   nycRentalsFull <- read_csv("./data/streeteasy_rentals.csv",
