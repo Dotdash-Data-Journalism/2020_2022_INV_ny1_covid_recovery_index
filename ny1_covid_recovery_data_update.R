@@ -17,7 +17,10 @@ library(magrittr)
 library(googlesheets4)
 library(httr)
 
+# Socrata password
+SCT_PW <- Sys.getenv("SCT_PW")
 
+# Latest week of analysis date
 weekOfAnalysisDate <- list.files("./visualizations/") %>% 
   str_match_all("\\d{4}-\\d{2}-\\d{2}_.*") %>%
   compact() %>% 
@@ -130,21 +133,28 @@ Sys.sleep(3)
 Sys.sleep(3)
 mtaUpdate <- tryCatch(
   {
-
-    mtaRidershipNYC <- read_csv("https://new.mta.info/document/20441", col_types = "cicicicicicic") %>%
-      select(Date, `Subways: Total Estimated Ridership`, `Subways: % of Comparable Pre-Pandemic Day`) %>%
-      mutate(`Subways: % of Comparable Pre-Pandemic Day` = (as.double(str_remove_all(`Subways: % of Comparable Pre-Pandemic Day`, "%")) - 100) / 100,
-             Date = mdy(Date)) %>%
-      arrange(Date) %>%
-      mutate(`7-day Average` = rollmean(`Subways: % of Comparable Pre-Pandemic Day`, k = 7, fill = NA, align = "right"),
+    
+    mta_rows <- as.integer(Sys.Date()) - as.integer(base::as.Date("2020-03-01"))
+    
+    mta_res <- GET(url = paste0("https://data.ny.gov/resource/vxuj-8kew.csv?$limit=", mta_rows),
+               authenticate(user = "anesta@dotdash.com", password = SCT_PW))
+    
+    stop_for_status(mta_res)
+    
+    content(mta_res, encoding = "UTF-8", col_types = cols(.default = col_character())) %>%
+      select(date, subways_total_estimated, subways_of_comparable_pre) %>% 
+      mutate(date = base::as.Date(date),
+             across(starts_with("subways"), as.double),
+             subways_of_comparable_pre = subways_of_comparable_pre * 100,
+             `7-day Average` = rollmean(subways_of_comparable_pre, k = 7, fill = NA, align = "right"),
              `Subway Mobility Index Original` = (1 + `7-day Average`) * 100,
-             `Subway Mobility Index` = if_else(`Subway Mobility Index Original` > 100, 100, `Subway Mobility Index Original`)) %>%
-      mutate(`Day of Week` = c(7, rep_len(seq(1, 7, 1), nrow(.) - 1)),
-             `Avg. Ridership` = rollmean(`Subways: Total Estimated Ridership`, k = 7, fill = NA, align = "right")) %>%
-      relocate(`Day of Week`, .before = Date) %>%
-      select(-`Subways: Total Estimated Ridership`) %>%
-      arrange(desc(Date)) %>% 
-      filter(Date <= weekOfAnalysisDate)
+             `Subway Mobility Index` = if_else(`Subway Mobility Index Original` > 100, 100, `Subway Mobility Index Original`),
+             `Day of Week` = c(7, rep_len(seq(1, 7, 1), nrow(.) - 1)),
+             `Avg. Ridership` = rollmean(subways_total_estimated, k = 7, fill = NA, align = "right")) %>% 
+      relocate(`Day of Week`, .before = date) %>%
+      relocate(subways_total_estimated, .after = last_col()) %>% 
+      arrange(desc(date)) %>% 
+      filter(date <= weekOfAnalysisDate) -> mtaRidershipNYC
 
   },
   error = function(e) {
@@ -256,15 +266,6 @@ homeSalesUpdate <- tryCatch({
     filter(between(`Week Ending`, left = as.Date("2020-01-01"), right = (weekOfAnalysisDate + 1))) %>%
     select(`Week Ending`, `Number of Pending Sales`, iso_week)
 
-  # read_excel(path = "./data/StreetEasy -- Dot Dash Weekly Data.xlsx",
-  #            sheet = "City Wide Data",
-  #            col_names = T,
-  #            col_types = c("date", "numeric", "numeric", "numeric", "numeric")) %>%
-  #   mutate(`Week Ending` = base::as.Date(`Week Ending`),
-  #          iso_week = isoweek(`Week Ending`)) %>%
-  #   filter(between(`Week Ending`, left = as.Date("2020-01-01"), right = (weekOfAnalysisDate + 1))) %>%
-  #   select(`Week Ending`, `Number of Pending Sales`, iso_week) -> streetEasyLatest
-
   streetEasyRef <- read_csv("./data/streeteasy_home_sales_ref.csv", col_names = T,
                             col_types = "dd")
 
@@ -299,15 +300,6 @@ rentalsUpdate <- tryCatch({
     filter(`Week Ending` == weekOfAnalysisDate + 1) %>%
     select(`Rental Inventory`) %>%
     pull()
-
-  # read_excel(path = "./data/StreetEasy -- Dot Dash Weekly Data.xlsx",
-  #            sheet = "City Wide Data",
-  #            col_names = T,
-  #            col_types = c("date", "numeric", "numeric", "numeric", "numeric")) %>%
-  #   mutate(`Week Ending` = base::as.Date(`Week Ending`)) %>%
-  #   filter(`Week Ending` == weekOfAnalysisDate + 1) %>%
-  #   select(`Rental Inventory`) %>%
-  #   pull() -> latestNYCRental
 
   newNYCRentals <- tibble_row(
     `Week of Year` = isoweek(weekOfAnalysisDate),
@@ -353,7 +345,7 @@ dataFileUpdate <- tryCatch({
     inner_join(updatedNYCCovid19Hospitalizations, by = c("Date" = "date_of_interest")) %>%
     inner_join(updatedNYCUI, by = c("Date" = "date")) %>%
     inner_join(openTableReady, by = "Date") %>%
-    inner_join(mtaRidershipNYC, by = c("Date")) %>%
+    inner_join(mtaRidershipNYC, by = c("Date" = "date")) %>%
     select(Date, `Covid-19 Hospitalizations Index`, `Unemployment Claims Index`,
            `Home Sales Index`, `Rental Inventory Index`, `Subway Mobility Index`,
            `Restaurant Reservations Index`) %>%
