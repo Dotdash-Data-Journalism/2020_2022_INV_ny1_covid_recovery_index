@@ -78,13 +78,14 @@ ot_update <- tryCatch({
   ot_raw_json <- ot_raw_text %>%
     str_match(regex("w.__INITIAL_STATE__ =\\s+(.*)", dotall = T)) %>%
     nth(2) %>%
-    str_remove(";\\}\\)\\(window\\);$")
+    str_remove(";w.__ENABLE_ANALYTICS_BACKEND__ = true;\\}\\)\\(window\\);$")
 
 
   Sys.sleep(5)
 
   ot_data <- ot_raw_json %>%
     fromJSON(json_str = .)
+  
 
   # Do NOT use the "rollingAverageYYYY" data, calculate trailing seven day average
   # manually from raw day-to-day data in "fullbook"
