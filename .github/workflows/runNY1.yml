@@ -23,7 +23,9 @@ jobs:
         with:
           r-version: '4.1.2'
       # install renv package
-      - run: R -e 'install.packages("renv")'
+      - run: |-
+          R -e 'install.packages("renv")'
+          R -e 'renv::upgrade(project = ".", reload = T, prompt = F)'
       # set up cache
       - name: Cache packages
         uses: actions/cache@v2
@@ -45,11 +47,10 @@ jobs:
           CLIENT_CERT_URL: ${{ secrets.CLIENT_CERT_URL }}
           SCT_PW: ${{ secrets.SCT_PW }}
       # execute Rscript
-      - run: |-
-          git pull
-          git config user.name "Automated"
-          git config user.email "actions@users.noreply.github.com"
-          git add -A
-          timestamp=$(date -u)
-          git commit -m "Latest NY1 Recovery update: ${timestamp}" || exit 0
-          git push
+      - name: Add and commit
+        id: add_commit
+        uses: EndBug/add-and-commit@v8
+        with:
+          committer_name: Automated
+          committer_email: actions@users.noreply.github.com
+          message: "Latest data"
