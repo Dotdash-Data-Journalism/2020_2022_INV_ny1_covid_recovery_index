@@ -67,21 +67,28 @@ ot_update <- tryCatch({
   
   # Finding script tag that has the json string data
   ot_data_script <- which(map_lgl(map_chr(ot_scripts, html_text), ~str_detect(.x, "__INITIAL_STATE__")))
-
+  
   ot_raw_text <- ot_scripts %>%
     nth(ot_data_script) %>%
     html_text()
+  
+  Sys.sleep(5)
 
+  ot_raw_text %>%
+    str_remove_all("\n\\s+") %>% 
+    str_match(regex("w\\w{0,5}.__INITIAL_STATE__\\s*=\\s*(.*)", dotall = T)) %>%
+    nth(2) -> ot_str_json_dirty
+  
+  Sys.sleep(3)
+  
+  end_nchar_ot_json <- nth(str_locate(ot_str_json_dirty, "]\\}]\\}\\}\\}"), 2)
+  
+  Sys.sleep(3)
+  
+  ot_raw_json <- str_sub(ot_str_json_dirty, start = 1L, end = end_nchar_ot_json)
+  
   Sys.sleep(5)
   
-  # Using regex to extract and clean json string data
-  ot_raw_json <- ot_raw_text %>%
-    str_match(regex("w.__INITIAL_STATE__ =\\s+(.*)", dotall = T)) %>%
-    nth(2) %>%
-    str_sub(start = 1L, end = nth(str_locate(., "]\\}]\\}\\}\\}"), 2))
-
-  Sys.sleep(5)
-
   ot_data <- ot_raw_json %>%
     fromJSON(json_str = .)
   
