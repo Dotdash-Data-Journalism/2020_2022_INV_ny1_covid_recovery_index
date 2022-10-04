@@ -339,7 +339,7 @@
     },
     "renv": {
       "Package": "renv",
-      "Version": "0.15.5",
+      "Version": "0.16.0",
       "OS_type": NA,
       "Repository": "CRAN",
       "Source": "Repository",
